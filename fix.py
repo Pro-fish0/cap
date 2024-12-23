@@ -17,7 +17,9 @@ def fetch_shift_capacities(date):
     try:
         response = requests.get(f"{GET_CAPACITY_URL}?date={date}")
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        print(f"📋 Capacities for {date}: {data}")  # Debug the response structure
+        return data
     except requests.RequestException as e:
         print(f"❌ Error fetching capacities for {date}: {str(e)}")
         return []
@@ -65,12 +67,18 @@ def process_month(year, month):
     for day in range(1, 32):  # Days in January
         date = f"{year}-{month:02d}-{day:02d}"
         shifts = fetch_shift_capacities(date)
+        if not isinstance(shifts, list):
+            print(f"❌ Unexpected data format for {date}: {shifts}")
+            continue
         for shift in shifts:
-            total_capacity = shift["total"]  # Adjust according to your API response
-            available_capacity = shift["available"]  # Adjust according to your API response
-            shift_type = shift["shift_type"]  # Adjust according to your API response
-            if available_capacity < 0:
-                fix_negative_capacity(date, shift_type, total_capacity, available_capacity)
+            try:
+                total_capacity = shift["total"]  # Adjust according to your API response
+                available_capacity = shift["available"]  # Adjust according to your API response
+                shift_type = shift["shift_type"]  # Adjust according to your API response
+                if available_capacity < 0:
+                    fix_negative_capacity(date, shift_type, total_capacity, available_capacity)
+            except (KeyError, TypeError) as e:
+                print(f"❌ Error processing shift for {date}: {str(e)}")
 
 if __name__ == "__main__":
     year = 2025
