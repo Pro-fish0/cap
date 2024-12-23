@@ -1,89 +1,63 @@
 import requests
+import json
+from datetime import datetime
 
-# Backend API endpoints
-GET_CAPACITY_URL = "http://209.38.41.138/api/shifts/capacity"
-SET_CAPACITY_URL = "http://209.38.41.138/api/admin/capacity"
+# Configuration
+API_BASE_URL = "http://209.38.41.138/api"  # Update this to match your API URL
 
-def fetch_shift_capacities(date):
-    """
-    Fetch capacities for a specific date.
+# Standard capacities for January 2025
+STANDARD_CAPACITIES = {
+    'Morning': 12,
+    'Evening': 15,
+    'Night': 12
+}
 
-    Args:
-        date (str): The date in "YYYY-MM-DD" format.
+def get_current_capacities():
+    """Get current capacity data for January 2025"""
+    response = requests.get(f"{API_BASE_URL}/shifts/capacity", params={
+        'date': '2025-01-01'
+    })
+    if response.status_code != 200:
+        raise Exception(f"Failed to get capacities: {response.text}")
+    return response.json()
 
-    Returns:
-        list: A list of shift capacities for the given date.
-    """
-    try:
-        response = requests.get(f"{GET_CAPACITY_URL}?date={date}")
-        response.raise_for_status()
-        data = response.json()
-        print(f"📋 Capacities for {date}: {data}")  # Debug the response structure
-        return data
-    except requests.RequestException as e:
-        print(f"❌ Error fetching capacities for {date}: {str(e)}")
-        return []
+def set_capacity(date, shift_type, capacity):
+    """Set capacity for a specific date and shift type"""
+    response = requests.post(f"{API_BASE_URL}/admin/capacity", json={
+        'date': date,
+        'shift_type': shift_type,
+        'capacity': capacity
+    })
+    if response.status_code != 200:
+        raise Exception(f"Failed to set capacity: {response.text}")
+    return response.json()
 
-def fix_negative_capacity(date, shift_type, total_capacity, available_capacity):
-    """
-    Fix negative capacities by resetting them to zero or recalculating.
-
-    Args:
-        date (str): The date in "YYYY-MM-DD" format.
-        shift_type (str): The shift type (e.g., "M", "E", "N").
-        total_capacity (int): The total capacity for the shift.
-        available_capacity (int): The available capacity for the shift.
-
-    Returns:
-        None
-    """
-    if available_capacity < 0:
-        print(f"⚠️ Negative capacity detected for {date} {shift_type}: {available_capacity}")
-        payload = {
-            "date": date,
-            "shift_type": shift_type,
-            "capacity": total_capacity,
-        }
-        try:
-            response = requests.post(SET_CAPACITY_URL, json=payload)
-            if response.status_code == 200:
-                print(f"✅ Fixed capacity for {date} {shift_type} to {total_capacity}")
-            else:
-                print(f"❌ Failed to fix capacity for {date} {shift_type}: {response.text}")
-        except requests.RequestException as e:
-            print(f"❌ Error fixing capacity for {date} {shift_type}: {str(e)}")
-
-def process_month(year, month):
-    """
-    Process all days in a month and fix negative capacities.
-
-    Args:
-        year (int): The year (e.g., 2025).
-        month (int): The month (e.g., 1 for January).
-
-    Returns:
-        None
-    """
-    for day in range(1, 32):  # Days in January
-        date = f"{year}-{month:02d}-{day:02d}"
-        shifts = fetch_shift_capacities(date)
-        if not isinstance(shifts, list):
-            print(f"❌ Unexpected data format for {date}: {shifts}")
-            continue
-        for shift in shifts:
+def fix_january_capacities():
+    print("Getting current capacity data...")
+    current_data = get_current_capacities()
+    
+    print("\nAnalyzing and fixing capacities for January 2025...")
+    for day in range(1, 32):
+        date_str = f"2025-01-{str(day).zfill(2)}"
+        
+        for shift_type, standard_capacity in STANDARD_CAPACITIES.items():
+            key = f"{day}_{shift_type}"
+            current = current_data.get(key, {})
+            taken = current.get('taken', 0)
+            
+            # Set the total capacity to standard value
+            print(f"\nProcessing {date_str} {shift_type}:")
+            print(f"Current - Total: {current.get('total', 0)}, Taken: {taken}, Available: {current.get('available', 0)}")
+            
             try:
-                total_capacity = shift["total"]  # Adjust according to your API response
-                available_capacity = shift["available"]  # Adjust according to your API response
-                shift_type = shift["shift_type"]  # Adjust according to your API response
-                if available_capacity < 0:
-                    fix_negative_capacity(date, shift_type, total_capacity, available_capacity)
-            except (KeyError, TypeError) as e:
-                print(f"❌ Error processing shift for {date}: {str(e)}")
+                result = set_capacity(date_str, shift_type, standard_capacity)
+                print(f"Updated - Total: {standard_capacity}, Taken: {taken}, Free: {standard_capacity - taken}")
+            except Exception as e:
+                print(f"Error updating {date_str} {shift_type}: {str(e)}")
 
 if __name__ == "__main__":
-    year = 2025
-    month = 1
-
-    print(f"🚀 Processing and fixing capacities for {year}-{month:02d}...")
-    process_month(year, month)
-    print("🎉 Capacity fixing completed.")
+    try:
+        fix_january_capacities()
+        print("\nCapacity update completed!")
+    except Exception as e:
+        print(f"Script failed: {str(e)}")
